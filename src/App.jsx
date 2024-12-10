@@ -87,7 +87,7 @@ export default function ChatGPTClone() {
   return (
     <div className="flex h-screen w-screen relative">
       {/* Sidebar toggle button (Hamburger menu) */}
-      <div className="absolute top-4 z-10">
+      <div className="absolute top-4 z-30">
         <button onClick={toggleSidebar} className="text-white">
           <Menu className="h-6 w-6" />
         </button>
