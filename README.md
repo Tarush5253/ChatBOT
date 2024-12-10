@@ -2,7 +2,7 @@
 
 This project is a feature-rich chatbot application that leverages AI for interactive conversations. Built with modern technologies, it delivers a seamless user experience and integrates with Gemini AI API for advanced functionality.
 
-![Logo](https://res.cloudinary.com/dnd5xffi3/image/upload/v1721545024/Wanderlust_Dev/pj3wxca2trzbpy6t6ebq.png)
+![Logo](https://cdn.iconscout.com/icon/free/png-256/free-chatgpt-icon-download-in-svg-png-gif-file-formats--ai-technology-artificial-intelligence-pack-science-icons-7576880.png?f=webp&w=256)
 
 ## Authors
 
