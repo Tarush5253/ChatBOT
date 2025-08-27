@@ -1,22 +1,25 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { ChatSidebar } from './components/sidebar'; // Ensure this is defined elsewhere
-import { generateMsg } from './generateMsg';
-import { Menu } from 'lucide-react'; // Add this for the hamburger menu
+import React, { useState, useEffect, useRef } from "react";
+import { ChatSidebar } from "./components/sidebar"; // Ensure this is defined elsewhere
+import { generateMsg } from "./generateMsg";
+import { Menu } from "lucide-react"; // Add this for the hamburger menu
+import Markdown from "react-markdown";
+import rehypeHighlight from "rehype-highlight";
+import "highlight.js/styles/github-dark.css";
 
 export default function ChatGPTClone() {
   const [chatHistory, setChatHistory] = useState(() => {
-    const storedHistory = localStorage.getItem('chatHistory');
+    const storedHistory = localStorage.getItem("chatHistory");
     return storedHistory ? JSON.parse(storedHistory) : [];
   });
   const [currentChatId, setCurrentChatId] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const [isOpen, setIsOpen] = React.useState(true); 
+  const [isOpen, setIsOpen] = React.useState(true);
   const buttomref = useRef();
 
   useEffect(() => {
-    localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
+    localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
     buttomref.current.scrollIntoView();
   }, [chatHistory]);
 
@@ -27,7 +30,7 @@ export default function ChatGPTClone() {
   const handleNewChat = () => {
     setCurrentChatId(null);
     setMessages([]);
-    setInput('');
+    setInput("");
   };
 
   const handleSelectChat = (id) => {
@@ -51,11 +54,11 @@ export default function ChatGPTClone() {
       setCurrentChatId(newChatId);
       setChatHistory((prev) => [
         ...prev,
-        { id: newChatId, title: input || 'New Chat', messages: [] }
+        { id: newChatId, title: input || "New Chat", messages: [] },
       ]);
     }
 
-    const newMessage = { role: 'user', content: input };
+    const newMessage = { role: "user", content: input };
     setMessages((prev) => [...prev, newMessage]);
 
     setIsTyping(true);
@@ -63,25 +66,51 @@ export default function ChatGPTClone() {
     try {
       const result = await generateMsg({ messages: input });
 
-      const aiResponse = { role: 'ai', content: result.candidates[0].content.parts[0].text };
+      const fullText = result.candidates[0].content.parts[0].text;
+      let currentText = "";
 
+      const aiResponse = { role: "ai", content: "" };
       setMessages((prev) => [...prev, aiResponse]);
 
-      setChatHistory((prev) =>
-        prev.map((chat) => {
-          if (chat.id === currentChatId) {
-            return { ...chat, messages: [...chat.messages, newMessage, aiResponse] };
-          }
-          return chat;
-        })
-      );
+      let i = 0;
+      const interval = setInterval(() => {
+        currentText += fullText[i];
+        i++;
+
+        setMessages((prev) =>
+          prev.map((msg, idx) =>
+            idx === prev.length - 1 ? { ...msg, content: currentText } : msg
+          )
+        );
+
+        if (i >= fullText.length) {
+          clearInterval(interval);
+
+          // Save final message in chatHistory
+          setChatHistory((prev) =>
+            prev.map((chat) => {
+              if (chat.id === currentChatId) {
+                return {
+                  ...chat,
+                  messages: [
+                    ...chat.messages,
+                    newMessage,
+                    { role: "ai", content: fullText },
+                  ],
+                };
+              }
+              return chat;
+            })
+          );
+        }
+      }, 30); // typing speed (ms per character)
     } catch (error) {
-      console.error('Error generating message:', error);
+      console.error("Error generating message:", error);
     } finally {
       setIsTyping(false);
     }
 
-    setInput(''); 
+    setInput("");
   };
 
   return (
@@ -93,7 +122,11 @@ export default function ChatGPTClone() {
         </button>
       </div>
 
-      <div className={`flex w-64 ${isOpen ? 'md:block hidden' : 'md:hidden block'} absolute md:relative transition-all duration-300`}>
+      <div
+        className={`flex w-64 ${
+          isOpen ? "md:block hidden" : "md:hidden block"
+        } absolute md:relative transition-all duration-300`}
+      >
         <ChatSidebar
           onNewChat={handleNewChat}
           chatHistory={chatHistory}
@@ -112,23 +145,31 @@ export default function ChatGPTClone() {
           <div className="flex w-full md:w-[65%] mx-auto h-[80vh]">
             <div className="h-full w-full overflow-y-auto hide-scrollbar">
               {messages.length === 0 && !input.trim() ? (
-              <div className="absolute text-gray-2  text-4xl mt-20 ml-20">
-                How can I help you?
-              </div>
-            ) : (messages.map((m, index) => (
-                <div
-                  key={index}
-                  className={`mb-4 w-full ${m.role === 'user' ? 'text-right' : 'text-left'}`}
-                >
-                  <span
-                    className={`inline-block p-2 rounded-lg ${
-                      m.role === 'user' ? 'bg-color text-white' : 'bg-black text-white opacity-70'
+                <div className="absolute text-gray-2  text-4xl mt-20 ml-20">
+                  How can I help you?
+                </div>
+              ) : (
+                messages.map((m, index) => (
+                  <div
+                    key={index}
+                    className={`mb-4 w-full ${
+                      m.role === "user" ? "text-right" : "text-left"
                     }`}
                   >
-                    {m.content}
-                  </span>
-                </div>
-              )))}
+                    <span
+                      className={`inline-block p-2 rounded-lg ${
+                        m.role === "user"
+                          ? "bg-color text-white"
+                          : "bg-black text-white opacity-70"
+                      }`}
+                    >
+                      <Markdown remarkPlugins={[rehypeHighlight]}>
+                        {m.content}
+                      </Markdown>
+                    </span>
+                  </div>
+                ))
+              )}
               {isTyping && (
                 <div className="text-left">
                   <span className="inline-block p-2 rounded-lg bg-black text-white opacity-70">
@@ -141,7 +182,10 @@ export default function ChatGPTClone() {
           </div>
 
           <div>
-            <form onSubmit={onSubmit} className="flex space-x-2 w-[80%] mx-auto">
+            <form
+              onSubmit={onSubmit}
+              className="flex space-x-2 w-[80%] mx-auto"
+            >
               <input
                 value={input}
                 onChange={handleInputChange}
