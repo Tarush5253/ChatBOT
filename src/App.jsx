@@ -138,14 +138,17 @@ export default function ChatGPTClone() {
       <div className="flex-1 flex flex-col py-4 px-8 w-full">
         <div className="flex-1 flex flex-col">
           <div>
-            <div className="text-2xl font-bold mb-4 mt-1 ml-14">ChatBOT</div>
+            <div className="text-2xl font-bold mb-4 md:mt-1 md:ml-14 ml-8 -mt-2 relative w-52 h-20">
+              <img src="logo.png" alt="logo" className=" h-60 absolute -bottom-20 " />
+              {/* ChatBOT */}
+              </div>
           </div>
 
           {/* Chat container with scrollable history */}
-          <div className="flex w-full md:w-[65%] mx-auto h-[80vh]">
+          <div className="flex w-full md:w-[65%] mx-auto h-[70vh] mb-4 relative">
             <div className="h-full w-full overflow-y-auto hide-scrollbar">
               {messages.length === 0 && !input.trim() ? (
-                <div className="absolute text-gray-2  text-4xl mt-20 ml-20">
+                <div className="absolute text-gray-2  text-4xl top-1/2 left-1/2 transform -translate-x-1/2 -md:translate-x-3/2 -translate-y-1/2 opacity-30 -z-10">
                   How can I help you?
                 </div>
               ) : (

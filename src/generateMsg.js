@@ -7,7 +7,7 @@ export async function generateMsg({ messages }) {
 
         const result = await axios({
             method: "POST",
-            url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${API_KEY}`,
+            url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${API_KEY}`,
             data: {
                 contents: [
                     {
