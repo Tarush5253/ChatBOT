@@ -32,7 +32,7 @@ export function ChatSidebar({ onNewChat, chatHistory, onSelectChat, isOpen }) {
         <i className="fa-regular fa-user text-lg mr-4"></i>
     
           <div className='text-white'>
-            <div className='font-semibold'>tarush's profile</div>
+            <div className='font-semibold'>Deepanshi's profile</div>
             <div className='text-sm'>Online</div>
           </div>
         </div>
