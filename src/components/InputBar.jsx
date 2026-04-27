@@ -42,7 +42,12 @@ export function InputBar({
   const showCounter = value.length > MAX_LEN * 0.85;
 
   return (
-    <div className="px-3 sm:px-6 pb-4 sm:pb-6 pt-2 bg-gradient-to-t from-surface via-surface to-surface/0">
+    <div
+      className="px-3 sm:px-6 pt-2 bg-gradient-to-t from-surface via-surface to-surface/0"
+      style={{
+        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 1.25rem)",
+      }}
+    >
       <form
         onSubmit={submit}
         className="max-w-3xl mx-auto"

@@ -225,7 +225,7 @@ export default function App() {
   const showWelcome = messages.length === 0 && !busy;
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-surface text-ink">
+    <div className="flex h-[100svh] w-screen overflow-hidden bg-surface text-ink">
       <Sidebar
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}

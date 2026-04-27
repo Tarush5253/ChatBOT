@@ -83,7 +83,7 @@ export function Sidebar({
       />
 
       <aside
-        className={`fixed md:relative top-0 left-0 z-40 h-full w-[86%] max-w-[320px] md:w-[280px] md:max-w-none
+        className={`fixed md:relative top-0 left-0 z-40 h-[100svh] md:h-full w-[86%] max-w-[320px] md:w-[280px] md:max-w-none
           flex flex-col bg-surface-raised border-r border-border
           transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]
           ${open ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}
