@@ -1,211 +1,310 @@
-import React, { useState, useEffect, useRef } from "react";
-import { ChatSidebar } from "./components/sidebar"; // Ensure this is defined elsewhere
-import { generateMsg } from "./generateMsg";
-import { Menu } from "lucide-react"; // Add this for the hamburger menu
-import Markdown from "react-markdown";
-import rehypeHighlight from "rehype-highlight";
-import "highlight.js/styles/github-dark.css";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Menu, PanelLeft, MoreHorizontal } from "lucide-react";
+import { Sidebar } from "./components/Sidebar";
+import { ChatWindow } from "./components/ChatWindow";
+import { InputBar } from "./components/InputBar";
+import { WelcomeScreen } from "./components/WelcomeScreen";
+import { Wordmark } from "./components/Logo";
+import { useChatStorage } from "./hooks/useChatStorage";
+import { useTheme } from "./hooks/useTheme";
+import { useSpeechRecognition, useSpeechSynthesis } from "./hooks/useSpeech";
+import { generateReply, generateChatTitle } from "./api/gemini";
 
-export default function ChatGPTClone() {
-  const [chatHistory, setChatHistory] = useState(() => {
-    const storedHistory = localStorage.getItem("chatHistory");
-    return storedHistory ? JSON.parse(storedHistory) : [];
-  });
+function uid() {
+  return (
+    (crypto.randomUUID && crypto.randomUUID()) ||
+    `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  );
+}
+
+export default function App() {
+  const { theme, toggle: toggleTheme } = useTheme();
+  const {
+    chats,
+    createChat,
+    updateChat,
+    deleteChat,
+    clearAll,
+    renameChat,
+  } = useChatStorage();
+
   const [currentChatId, setCurrentChatId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
-  const [isOpen, setIsOpen] = React.useState(true);
-  const buttomref = useRef();
+  const [busy, setBusy] = useState(false);
+  const [streamingId, setStreamingId] = useState(null);
 
+  const [sidebarOpen, setSidebarOpen] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth >= 768 : true
+  );
+
+  const abortRef = useRef({ aborted: false });
+  const streamTimerRef = useRef(null);
+
+  const speech = useSpeechSynthesis();
+  const voice = useSpeechRecognition({
+    onResult: (transcript, isFinal) => {
+      setInput(transcript);
+      if (isFinal) voice.stop();
+    },
+  });
+
+  // Sync messages when switching chats
   useEffect(() => {
-    localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
-    buttomref.current.scrollIntoView();
-  }, [chatHistory]);
+    if (!currentChatId) {
+      setMessages([]);
+      return;
+    }
+    const chat = chats.find((c) => c.id === currentChatId);
+    setMessages(chat?.messages || []);
+  }, [currentChatId]); // eslint-disable-line
 
-  const handleInputChange = (e) => {
-    setInput(e.target.value);
-  };
+  // Close mobile sidebar on resize up to desktop
+  useEffect(() => {
+    const onResize = () => {
+      if (window.innerWidth >= 768) setSidebarOpen(true);
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
-  const handleNewChat = () => {
+  const handleNewChat = useCallback(() => {
     setCurrentChatId(null);
     setMessages([]);
     setInput("");
-  };
+    speech.stop();
+    if (window.innerWidth < 768) setSidebarOpen(false);
+  }, [speech]);
 
-  const handleSelectChat = (id) => {
-    setCurrentChatId(id);
-    const selectedChat = chatHistory.find((chat) => chat.id === id);
-    if (selectedChat) {
-      setMessages(selectedChat.messages || []);
+  const handleSelectChat = useCallback(
+    (id) => {
+      setCurrentChatId(id);
+      speech.stop();
+      if (window.innerWidth < 768) setSidebarOpen(false);
+    },
+    [speech]
+  );
+
+  const handleDeleteChat = useCallback(
+    (id) => {
+      deleteChat(id);
+      if (id === currentChatId) {
+        setCurrentChatId(null);
+        setMessages([]);
+      }
+    },
+    [deleteChat, currentChatId]
+  );
+
+  const handleClearAll = useCallback(() => {
+    clearAll();
+    setCurrentChatId(null);
+    setMessages([]);
+  }, [clearAll]);
+
+  const persistMessages = useCallback(
+    (chatId, msgs) => {
+      updateChat(chatId, { messages: msgs });
+    },
+    [updateChat]
+  );
+
+  const stopStreaming = useCallback(() => {
+    abortRef.current.aborted = true;
+    if (streamTimerRef.current) {
+      clearInterval(streamTimerRef.current);
+      streamTimerRef.current = null;
     }
-  };
+    setBusy(false);
+    setStreamingId(null);
+  }, []);
 
-  const toggleSidebar = () => {
-    setIsOpen((prev) => !prev); // Toggle the sidebar open/close
-  };
+  const sendMessage = useCallback(
+    async (rawText) => {
+      const text = (rawText ?? input).trim();
+      if (!text || busy) return;
 
-  const onSubmit = async (e) => {
-    e.preventDefault();
-    if (!input.trim()) return; // Prevent submitting empty messages
+      voice.stop();
+      speech.stop();
 
-    if (!currentChatId) {
-      const newChatId = Date.now().toString(); // Create a new chat ID
-      setCurrentChatId(newChatId);
-      setChatHistory((prev) => [
-        ...prev,
-        { id: newChatId, title: input || "New Chat", messages: [] },
-      ]);
-    }
+      // Ensure a chat exists
+      let chatId = currentChatId;
+      let isNewChat = false;
+      if (!chatId) {
+        const created = createChat(text);
+        chatId = created.id;
+        isNewChat = true;
+        setCurrentChatId(chatId);
+      }
 
-    const newMessage = { role: "user", content: input };
-    setMessages((prev) => [...prev, newMessage]);
+      const userMsg = { id: uid(), role: "user", content: text };
+      const nextMessages = [...messages, userMsg];
+      setMessages(nextMessages);
+      setInput("");
+      setBusy(true);
+      abortRef.current = { aborted: false };
 
-    setIsTyping(true);
+      try {
+        const reply = await generateReply(nextMessages);
 
-    try {
-      const result = await generateMsg({ messages: input });
+        if (abortRef.current.aborted) return;
 
-      const fullText = result.candidates[0].content.parts[0].text;
-      let currentText = "";
+        const aiId = uid();
+        const aiMsg = { id: aiId, role: "ai", content: "" };
+        let withAi = [...nextMessages, aiMsg];
+        setMessages(withAi);
+        setStreamingId(aiId);
 
-      const aiResponse = { role: "ai", content: "" };
-      setMessages((prev) => [...prev, aiResponse]);
+        // Smooth typewriter effect (chunked for speed)
+        const totalDurationMs = Math.min(2200, Math.max(450, reply.length * 8));
+        const chunkSize = Math.max(1, Math.ceil(reply.length / (totalDurationMs / 22)));
+        let i = 0;
 
-      let i = 0;
-      const interval = setInterval(() => {
-        currentText += fullText[i];
-        i++;
+        await new Promise((resolve) => {
+          streamTimerRef.current = setInterval(() => {
+            if (abortRef.current.aborted) {
+              clearInterval(streamTimerRef.current);
+              streamTimerRef.current = null;
+              withAi = withAi.map((m) =>
+                m.id === aiId ? { ...m, content: reply } : m
+              );
+              setMessages(withAi);
+              resolve();
+              return;
+            }
+            i = Math.min(reply.length, i + chunkSize);
+            withAi = withAi.map((m) =>
+              m.id === aiId ? { ...m, content: reply.slice(0, i) } : m
+            );
+            setMessages(withAi);
+            if (i >= reply.length) {
+              clearInterval(streamTimerRef.current);
+              streamTimerRef.current = null;
+              resolve();
+            }
+          }, 22);
+        });
 
-        setMessages((prev) =>
-          prev.map((msg, idx) =>
-            idx === prev.length - 1 ? { ...msg, content: currentText } : msg
-          )
-        );
+        setStreamingId(null);
+        persistMessages(chatId, withAi);
 
-        if (i >= fullText.length) {
-          clearInterval(interval);
-
-          // Save final message in chatHistory
-          setChatHistory((prev) =>
-            prev.map((chat) => {
-              if (chat.id === currentChatId) {
-                return {
-                  ...chat,
-                  messages: [
-                    ...chat.messages,
-                    newMessage,
-                    { role: "ai", content: fullText },
-                  ],
-                };
-              }
-              return chat;
-            })
-          );
+        // For brand-new chats, generate a nicer title in the background
+        if (isNewChat) {
+          generateChatTitle(text).then((title) => {
+            if (title) renameChat(chatId, title);
+          });
         }
-      }, 30); // typing speed (ms per character)
-    } catch (error) {
-      console.error("Error generating message:", error);
-    } finally {
-      setIsTyping(false);
-    }
+      } catch (err) {
+        const errMsg = {
+          id: uid(),
+          role: "ai",
+          content: err.message || "Something went wrong. Please try again.",
+          error: true,
+        };
+        const withErr = [...nextMessages, errMsg];
+        setMessages(withErr);
+        persistMessages(chatId, withErr);
+      } finally {
+        setBusy(false);
+        setStreamingId(null);
+      }
+    },
+    [
+      input,
+      busy,
+      messages,
+      currentChatId,
+      createChat,
+      persistMessages,
+      voice,
+      speech,
+      renameChat,
+    ]
+  );
 
-    setInput("");
-  };
+  const showWelcome = messages.length === 0 && !busy;
 
   return (
-    <div className="flex h-screen w-screen relative">
-      {/* Sidebar toggle button (Hamburger menu) */}
-      <div className="absolute top-4 z-30">
-        <button onClick={toggleSidebar} className="text-white">
-          <Menu className="h-6 w-6" />
-        </button>
-      </div>
+    <div className="flex h-screen w-screen overflow-hidden bg-surface text-ink">
+      <Sidebar
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        chats={chats}
+        currentChatId={currentChatId}
+        onNewChat={handleNewChat}
+        onSelectChat={handleSelectChat}
+        onDeleteChat={handleDeleteChat}
+        onRenameChat={renameChat}
+        onClearAll={handleClearAll}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+      />
 
-      <div
-        className={`flex w-64 ${
-          isOpen ? "md:block hidden" : "md:hidden block"
-        } absolute md:relative transition-all duration-300`}
-      >
-        <ChatSidebar
-          onNewChat={handleNewChat}
-          chatHistory={chatHistory}
-          onSelectChat={handleSelectChat}
-          isOpen={isOpen}
-        />
-      </div>
-
-      <div className="flex-1 flex flex-col py-4 px-8 w-full">
-        <div className="flex-1 flex flex-col">
-          <div>
-            <div className="text-2xl font-bold mb-4 md:mt-1 md:ml-14 ml-8 -mt-2 relative w-52 h-20">
-              <img src="logo.png" alt="logo" className=" h-60 absolute -bottom-20 " />
-              {/* ChatBOT */}
-              </div>
-          </div>
-
-          {/* Chat container with scrollable history */}
-          <div className="flex w-full md:w-[65%] mx-auto h-[70vh] mb-4 relative">
-            <div className="h-full w-full overflow-y-auto hide-scrollbar">
-              {messages.length === 0 && !input.trim() ? (
-                <div className="absolute text-gray-2  text-4xl top-1/2 left-1/2 transform -translate-x-1/2 -md:translate-x-3/2 -translate-y-1/2 opacity-30 -z-10">
-                  How can I help you?
-                </div>
+      <main className="flex-1 flex flex-col min-w-0 relative">
+        {/* Top bar */}
+        <header className="flex items-center justify-between px-3 sm:px-5 h-14 border-b border-border bg-surface/80 backdrop-blur-md z-10">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSidebarOpen((o) => !o)}
+              className="p-2 rounded-lg hover:bg-surface-sunken transition-colors"
+              aria-label="Toggle sidebar"
+              title="Toggle sidebar"
+            >
+              {sidebarOpen ? (
+                <PanelLeft className="w-4 h-4" />
               ) : (
-                messages.map((m, index) => (
-                  <div
-                    key={index}
-                    className={`mb-4 w-full ${
-                      m.role === "user" ? "text-right" : "text-left"
-                    }`}
-                  >
-                    <span
-                      className={`inline-block p-2 rounded-lg ${
-                        m.role === "user"
-                          ? "bg-color text-white"
-                          : "bg-black text-white opacity-70"
-                      }`}
-                    >
-                      <Markdown remarkPlugins={[rehypeHighlight]}>
-                        {m.content}
-                      </Markdown>
-                    </span>
-                  </div>
-                ))
+                <Menu className="w-4 h-4" />
               )}
-              {isTyping && (
-                <div className="text-left">
-                  <span className="inline-block p-2 rounded-lg bg-black text-white opacity-70">
-                    AI is typing...
-                  </span>
-                </div>
-              )}
-              <div ref={buttomref}></div>
+            </button>
+            <div className="md:hidden">
+              <Wordmark />
+            </div>
+            <div className="hidden md:block text-sm text-ink-muted truncate max-w-[40ch]">
+              {currentChatId
+                ? chats.find((c) => c.id === currentChatId)?.title
+                : "New conversation"}
             </div>
           </div>
 
-          <div>
-            <form
-              onSubmit={onSubmit}
-              className="flex space-x-2 w-[80%] mx-auto"
-            >
-              <input
-                value={input}
-                onChange={handleInputChange}
-                placeholder="Type your message..."
-                className="flex-grow p-2 border rounded"
-              />
-              <button
-                type="submit"
-                disabled={isTyping}
-                className="bg-blue-500 text-white px-4 py-2 rounded disabled:opacity-50"
-              >
-                <i className="fa-solid fa-square-arrow-up-right"></i>
-              </button>
-            </form>
-          </div>
-        </div>
-      </div>
+          <button
+            onClick={handleNewChat}
+            className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium
+              bg-surface-sunken border border-border hover:border-border-strong hover:bg-surface
+              transition-colors"
+            title="Start a new chat"
+          >
+            <MoreHorizontal className="w-3 h-3" />
+            <span>New chat</span>
+          </button>
+        </header>
+
+        {showWelcome ? (
+          <WelcomeScreen onPick={(t) => sendMessage(t)} />
+        ) : (
+          <ChatWindow
+            messages={messages}
+            loading={busy && streamingId === null}
+            streamingId={streamingId}
+            onSpeak={(text, id) => speech.speak(text, id)}
+            onStopSpeak={speech.stop}
+            speakingId={speech.speakingId}
+            speechSupported={speech.supported}
+          />
+        )}
+
+        <InputBar
+          value={input}
+          onChange={setInput}
+          onSubmit={() => sendMessage()}
+          disabled={false}
+          busy={busy}
+          onAbort={stopStreaming}
+          onStartVoice={voice.start}
+          onStopVoice={voice.stop}
+          listening={voice.listening}
+          voiceSupported={voice.supported}
+        />
+      </main>
     </div>
   );
 }
