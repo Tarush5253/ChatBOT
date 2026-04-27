@@ -1,14 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Menu, PanelLeft, MoreHorizontal } from "lucide-react";
-import { Sidebar } from "./components/Sidebar";
-import { ChatWindow } from "./components/ChatWindow";
-import { InputBar } from "./components/InputBar";
-import { WelcomeScreen } from "./components/WelcomeScreen";
-import { Wordmark } from "./components/Logo";
-import { useChatStorage } from "./hooks/useChatStorage";
-import { useTheme } from "./hooks/useTheme";
-import { useSpeechRecognition, useSpeechSynthesis } from "./hooks/useSpeech";
-import { generateReply, generateChatTitle } from "./api/gemini";
+import { Sidebar } from "./components/Sidebar.jsx";
+import { ChatWindow } from "./components/ChatWindow.jsx";
+import { InputBar } from "./components/InputBar.jsx";
+import { WelcomeScreen } from "./components/WelcomeScreen.jsx";
+import { Wordmark } from "./components/Logo.jsx";
+import { useChatStorage } from "./hooks/useChatStorage.js";
+import { useTheme } from "./hooks/useTheme.js";
+import { useSpeechRecognition, useSpeechSynthesis } from "./hooks/useSpeech.js";
+import { generateReply, generateChatTitle } from "./api/gemini.js";
 
 function uid() {
   return (

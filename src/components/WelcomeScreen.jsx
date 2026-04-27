@@ -1,6 +1,6 @@
 import React from "react";
 import { Lightbulb, Code2, BookOpen, Compass } from "lucide-react";
-import { Logo } from "./Logo";
+import { Logo } from "./Logo.jsx";
 
 const SUGGESTIONS = [
   {

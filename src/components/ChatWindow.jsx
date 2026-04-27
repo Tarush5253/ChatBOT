@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { Message, TypingIndicator } from "./Message";
+import { Message, TypingIndicator } from "./Message.jsx";
 
 export function ChatWindow({
   messages,

@@ -3,7 +3,7 @@ import Markdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import "highlight.js/styles/github.css";
 import { Copy, Check, Volume2, Square, User, AlertCircle } from "lucide-react";
-import { Logo } from "./Logo";
+import { Logo } from "./Logo.jsx";
 
 function CodeBlock({ inline, className, children, ...props }) {
   const [copied, setCopied] = useState(false);

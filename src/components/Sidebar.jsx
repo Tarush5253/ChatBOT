@@ -11,7 +11,7 @@ import {
   Pencil,
   Check,
 } from "lucide-react";
-import { Wordmark } from "./Logo";
+import { Wordmark } from "./Logo.jsx";
 
 function groupByDate(chats) {
   const today = new Date();
